@@ -24,7 +24,7 @@ Pick a **globally unique** registry name: lowercase letters and digits only, for
 
 ```powershell
 $RG   = "rg-cia2-cicd"
-$LOC  = "centralindia"              # if a policy blocks it, try southeastasia or eastus
+$LOC  = "centralindia"              # allowed for students: centralindia, koreacentral, austriaeast, indonesiacentral, malaysiawest
 $ACR  = "cia2taskmgr<rollno>"       # <-- change this
 $AKS  = "aks-cia2"
 
@@ -40,11 +40,11 @@ az acr create --resource-group $RG --name $ACR --sku Basic --admin-enabled true
 
 # Kubernetes cluster: 1 small node, free control plane (~10-15 minutes)
 az aks create --resource-group $RG --name $AKS `
-  --node-count 1 --node-vm-size Standard_B2s `
+  --node-count 1 --node-vm-size Standard_B2als_v2 `
   --tier free --generate-ssh-keys
 ```
 
-> If `Standard_B2s` is not available in your region, use `Standard_B2als_v2` or `Standard_D2s_v3`.
+> Azure for Students in Central India offers `Standard_B2als_v2` (2 vCPU, 4 GB). If it is not available, check with `az vm list-skus -l centralindia --resource-type virtualMachines -o table`.
 > Azure for Students has a small vCPU quota; one 2-vCPU node fits inside it.
 
 Check that the cluster works:
