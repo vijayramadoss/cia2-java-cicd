@@ -1,0 +1,107 @@
+---
+# Deploys the Task Manager to Kubernetes (Azure AKS) and checks that it works.
+#
+# Run by the CI/CD pipeline:
+#   ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
+#
+# Settings come from environment variables:
+#   IMAGE              full image name, e.g. myacr.azurecr.io/taskmanager:1a2b3c4
+#   APP_VERSION        version expected at /api/info after the rollout
+#   ACR_LOGIN_SERVER   \
+#   ACR_USERNAME        > registry login, used to create the image pull secret
+#   ACR_PASSWORD       /
+
+- name: Deploy Task Manager to Kubernetes
+  hosts: k8s_controller
+  gather_facts: false
+
+  vars:
+    k8s_namespace: taskmanager
+    app_name: taskmanager
+    manifest_dir: "{{ playbook_dir }}/../k8s"
+    image: "{{ lookup('env', 'IMAGE') | default('taskmanager:local', true) }}"
+    app_version: "{{ lookup('env', 'APP_VERSION') }}"
+    registry_server: "{{ lookup('env', 'ACR_LOGIN_SERVER') }}"
+    registry_username: "{{ lookup('env', 'ACR_USERNAME') }}"
+    registry_password: "{{ lookup('env', 'ACR_PASSWORD') }}"
+
+  tasks:
+    - name: Create the namespace
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ manifest_dir }}/namespace.yaml"
+
+    - name: Create the image pull secret for Azure Container Registry
+      when: registry_server | length > 0
+      no_log: true  # keeps the registry password out of the logs
+      kubernetes.core.k8s:
+        state: present
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: kubernetes.io/dockerconfigjson
+          metadata:
+            name: acr-pull
+            namespace: "{{ k8s_namespace }}"
+          data:
+            .dockerconfigjson: >-
+              {{ {'auths': {registry_server: {
+                    'username': registry_username,
+                    'password': registry_password,
+                    'auth': (registry_username ~ ':' ~ registry_password) | b64encode}}}
+                 | to_json | b64encode }}
+
+    - name: Deploy the application with image {{ image }} and wait for the rollout
+      kubernetes.core.k8s:
+        state: present
+        apply: true
+        definition: "{{ lookup('file', manifest_dir + '/deployment.yaml') | replace('taskmanager:local', image) | from_yaml }}"
+        wait: true
+        wait_timeout: 300
+
+    - name: Create the LoadBalancer service
+      kubernetes.core.k8s:
+        state: present
+        apply: true
+        src: "{{ manifest_dir }}/service.yaml"
+
+    - name: Wait for Azure to give the service a public IP
+      kubernetes.core.k8s_info:
+        kind: Service
+        name: "{{ app_name }}"
+        namespace: "{{ k8s_namespace }}"
+      register: svc
+      until: svc.resources[0].status.loadBalancer.ingress is defined
+      retries: 30
+      delay: 10
+
+    - name: Work out the application URL
+      ansible.builtin.set_fact:
+        app_url: "http://{{ svc.resources[0].status.loadBalancer.ingress[0].ip | default(svc.resources[0].status.loadBalancer.ingress[0].hostname) }}"
+
+    - name: Check the health endpoint
+      ansible.builtin.uri:
+        url: "{{ app_url }}/actuator/health"
+        return_content: true
+      register: health
+      until: health.status == 200 and health.json.status == 'UP'
+      retries: 20
+      delay: 6
+
+    - name: Check that the new version is being served
+      ansible.builtin.uri:
+        url: "{{ app_url }}/api/info"
+        return_content: true
+      register: info
+      until: app_version | length == 0 or info.json.version == app_version
+      retries: 20
+      delay: 6
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg:
+          - "Application URL : {{ app_url }}"
+          - "Health          : {{ health.json.status }}"
+          - "Version served  : {{ info.json.version }}"
+          - "Answered by pod : {{ info.json.host }}"

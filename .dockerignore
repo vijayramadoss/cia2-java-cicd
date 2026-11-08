@@ -1,0 +1,19 @@
+# Only pom.xml and src/ are needed to build the image
+target/
+.git/
+.github/
+.githooks/
+.idea/
+.vscode/
+*.iml
+k8s/
+ansible/
+sonarqube/
+docs/
+screenshots/
+*.md
+.env
+*.env
+.gitleaks.toml
+Dockerfile
+.dockerignore

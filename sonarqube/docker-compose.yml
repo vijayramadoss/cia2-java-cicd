@@ -1,0 +1,22 @@
+# Local SonarQube server for code-quality scans on your own machine.
+#   Start:  docker compose -f sonarqube/docker-compose.yml up -d
+#   Open:   http://localhost:9000   (first login admin / admin, then you must set a new password)
+#   Scan:   mvn verify sonar:sonar -Dsonar.host.url=http://localhost:9000 -Dsonar.token=<your token>
+#   Stop:   docker compose -f sonarqube/docker-compose.yml down
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

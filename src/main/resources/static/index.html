@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CIA2 Task Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+    <h1 id="app-name">CIA2 Task Manager</h1>
+    <p id="app-message" class="message">Loading…</p>
+    <p class="meta">
+        Version <code id="app-version">-</code>
+        &middot; Served by pod <code id="app-host">-</code>
+    </p>
+</header>
+
+<main>
+    <section class="stats">
+        <div><span id="stat-total">0</span> total</div>
+        <div><span id="stat-pending">0</span> pending</div>
+        <div><span id="stat-completed">0</span> done</div>
+    </section>
+
+    <form id="task-form">
+        <label for="task-title" class="sr-only">New task</label>
+        <input id="task-title" type="text" maxlength="100" placeholder="What needs to be done?" required>
+        <button type="submit">Add task</button>
+    </form>
+    <p id="error" class="error" role="alert"></p>
+
+    <ul id="task-list"></ul>
+    <p id="empty" class="empty">No tasks yet. Add one above.</p>
+</main>
+
+<footer>
+    Java 21 &middot; Spring Boot &middot; Maven &middot; Docker &middot; Kubernetes (AKS) &middot; GitHub Actions &middot; Ansible &middot; SonarQube &middot; Gitleaks
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

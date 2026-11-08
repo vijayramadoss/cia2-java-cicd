@@ -1,0 +1,4 @@
+# Keep Linux line endings so scripts and YAML work on the Linux CI runners
+* text=auto eol=lf
+*.png binary
+*.jpg binary

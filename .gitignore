@@ -1,0 +1,28 @@
+# Build output
+target/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Local secrets - never commit these (Gitleaks also checks)
+.env
+*.env
+.sonar-local
+kubeconfig*
+*.pem
+*.pfx
+
+# Scan reports generated locally
+gitleaks-report.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SonarQube scanner cache
+.sonar/

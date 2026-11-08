@@ -1,0 +1,160 @@
+:root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1f2933;
+    --muted: #616e7c;
+    --accent: #2563eb;
+    --border: #d9dee5;
+    --error: #b42318;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+header, main, footer {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+header {
+    padding-top: 32px;
+}
+
+h1 {
+    margin: 0 0 4px;
+    font-size: 1.8rem;
+}
+
+.message {
+    margin: 0 0 4px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.meta {
+    margin: 0 0 24px;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+code {
+    background: #e8ecf1;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+.stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stats div {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    color: var(--muted);
+}
+
+.stats span {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+form {
+    display: flex;
+    gap: 8px;
+}
+
+input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+button.secondary {
+    background: #e8ecf1;
+    color: var(--text);
+}
+
+.error {
+    color: var(--error);
+    min-height: 1.2em;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+li span {
+    overflow-wrap: anywhere;
+}
+
+li div {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+li.done span {
+    text-decoration: line-through;
+    color: var(--muted);
+}
+
+.empty {
+    color: var(--muted);
+}
+
+footer {
+    margin-top: 40px;
+    padding-bottom: 24px;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}

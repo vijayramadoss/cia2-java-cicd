@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskmanager
+  namespace: taskmanager
+  labels:
+    app: taskmanager
+spec:
+  # On AKS this creates an Azure Load Balancer with a public IP
+  type: LoadBalancer
+  selector:
+    app: taskmanager
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

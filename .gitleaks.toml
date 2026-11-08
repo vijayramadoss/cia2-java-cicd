@@ -1,0 +1,19 @@
+# Gitleaks configuration - secret scanning for this repository.
+# Used by the pre-commit hook (.githooks/pre-commit) and by the CI/CD pipeline.
+title = "CIA2 Task Manager - Gitleaks config"
+
+# Start from Gitleaks' built-in rules (AWS keys, Azure keys, GitHub tokens,
+# private keys, JWTs, generic API keys and ~150 more).
+[extend]
+useDefault = true
+
+# Extra rule for this project: hard-coded passwords/secrets/tokens in
+# Spring Boot properties or YAML files (Kubernetes, Ansible, workflows).
+# Values that are placeholders like ${VAR} or {{ var }} are not flagged.
+[[rules]]
+id = "hardcoded-config-secret"
+description = "Hard-coded password, secret or token in a config file"
+regex = '''(?i)\b[\w.-]*(?:password|passwd|secret|token)[\w.-]*\s*[=:]\s*['"]?([^\s'"${}]{8,})'''
+secretGroup = 1
+path = '''(?i)\.(?:properties|ya?ml|env|ini|cfg|conf)$'''
+keywords = ["password", "passwd", "secret", "token"]

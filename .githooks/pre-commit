@@ -1,0 +1,23 @@
+#!/bin/sh
+# Gitleaks pre-commit hook: stops a commit if the staged changes contain a secret.
+# Turn it on once per clone with:   git config core.hooksPath .githooks
+# The CI/CD pipeline runs the same scan again on every push.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "[pre-commit] gitleaks is not installed - skipping local secret scan (CI will still scan)."
+    exit 0
+fi
+
+echo "[pre-commit] Scanning staged changes for secrets with Gitleaks..."
+gitleaks git --pre-commit --staged --redact --no-banner --config .gitleaks.toml
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "[pre-commit] Commit blocked: Gitleaks found a secret in the staged changes."
+    echo "             Remove it (use an environment variable or GitHub secret instead) and try again."
+    exit 1
+fi
+
+echo "[pre-commit] No secrets found."
+exit 0
