@@ -158,7 +158,7 @@ Refresh the browser. The new message and the new commit SHA (in "Version") are s
 The fake key is built from two parts so that this guide itself does not trip Gitleaks.
 
 ```powershell
-"aws_access_key_id = " + "AKIA" + "Z7Q3EXAMPLE4QWRT" | Out-File demo-secret.txt
+"aws_access_key_id = " + "AKIA" + "Z7Q3EXAMPLE4QWRT" | Out-File -Encoding ascii demo-secret.txt
 git add demo-secret.txt
 git commit -m "test"          # blocked by the pre-commit hook
 git reset demo-secret.txt; Remove-Item demo-secret.txt
