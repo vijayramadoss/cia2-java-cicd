@@ -54,8 +54,9 @@ jobs:
         run: |
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
           file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfLO "$base/$file"
-          curl -sSfL "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " $file\$" | sha256sum -c -
+          # --proto '=https' refuses any redirect to plain HTTP (SonarQube rule S6506)
+          curl --proto '=https' --tlsv1.2 -sSfLO "$base/$file"
+          curl --proto '=https' --tlsv1.2 -sSfL "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " $file\$" | sha256sum -c -
           tar -xzf "$file" gitleaks
           sudo mv gitleaks /usr/local/bin/
           gitleaks version
@@ -165,7 +166,8 @@ jobs:
           docker images "$REGISTRY/$IMAGE_NAME"
 
       - name: Log in to Azure Container Registry
-        uses: docker/login-action@v4
+        # Third-party action pinned to a full commit SHA so a moved tag cannot change it (S7637)
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ vars.ACR_LOGIN_SERVER }}
           username: ${{ secrets.ACR_USERNAME }}
@@ -202,7 +204,8 @@ jobs:
 
       - name: Install Ansible and the Kubernetes client
         run: |
-          pip install --quiet ansible kubernetes
+          # Wheels only (no setup scripts run) and every package hash-locked (S8541, S8544)
+          pip install --quiet --only-binary :all: --require-hashes -r ansible/requirements.txt
           ansible --version | head -1
           ansible-galaxy collection list kubernetes.core
 

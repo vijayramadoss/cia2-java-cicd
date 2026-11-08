@@ -1,0 +1,4 @@
+# Top-level tools for the Ansible deploy stage.
+# Regenerate the lock file with: pip-compile --generate-hashes ansible/requirements.in
+ansible==14.5.0
+kubernetes==37.0.1

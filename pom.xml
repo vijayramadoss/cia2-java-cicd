@@ -26,6 +26,13 @@
         <sonar.projectKey>cia2-taskmanager</sonar.projectKey>
         <sonar.projectName>CIA2 Task Manager</sonar.projectName>
         <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+
+        <!-- Accepted risk: the demo app is served over plain HTTP on the LoadBalancer IP
+             (no domain/TLS - see "Limitations" in the report), so the pipeline's post-deploy
+             health checks must call http://. Rule S5332 is ignored for that file only. -->
+        <sonar.issue.ignore.multicriteria>httpcheck</sonar.issue.ignore.multicriteria>
+        <sonar.issue.ignore.multicriteria.httpcheck.ruleKey>githubactions:S5332</sonar.issue.ignore.multicriteria.httpcheck.ruleKey>
+        <sonar.issue.ignore.multicriteria.httpcheck.resourceKey>.github/workflows/ci-cd.yml</sonar.issue.ignore.multicriteria.httpcheck.resourceKey>
     </properties>
 
     <dependencies>
