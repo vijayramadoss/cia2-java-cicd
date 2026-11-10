@@ -26,6 +26,12 @@
     registry_password: "{{ lookup('env', 'ACR_PASSWORD') }}"
 
   tasks:
+    - name: Check that a real registry image was passed in
+      ansible.builtin.assert:
+        that: registry_server | length == 0 or image.startswith(registry_server ~ '/')
+        fail_msg: "IMAGE '{{ image }}' is not in registry {{ registry_server }} - check the pipeline's IMAGE variable"
+        quiet: true
+
     - name: Create the namespace
       kubernetes.core.k8s:
         state: present

@@ -135,8 +135,10 @@ jobs:
     needs: build-test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Only the short commit SHA is passed on. The full image name contains the
+    # registry name, which equals the ACR_USERNAME secret, and GitHub silently
+    # drops any job output that contains a secret value.
     outputs:
-      image: ${{ steps.meta.outputs.image }}
       version: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout source code
@@ -211,7 +213,7 @@ jobs:
 
       - name: Deploy or update the application (Ansible playbook)
         env:
-          IMAGE: ${{ needs.docker.outputs.image }}
+          IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.version }}
           APP_VERSION: ${{ needs.docker.outputs.version }}
           ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
@@ -229,5 +231,5 @@ jobs:
           {
             echo "### Deployed :rocket:"
             echo "Application URL: http://$ip"
-            echo "Image: \`${{ needs.docker.outputs.image }}\`"
+            echo "Image: \`${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.version }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
