@@ -230,6 +230,6 @@ jobs:
           echo "Version info:"; curl -sSf "http://$ip/api/info"; echo
           {
             echo "### Deployed :rocket:"
-            echo "Application URL: http://$ip"
+            echo "Application URL: http://cia2-taskmanager.centralindia.cloudapp.azure.com (IP: http://$ip)"
             echo "Image: \`${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.version }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

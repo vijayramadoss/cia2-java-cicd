@@ -121,7 +121,9 @@ When it finishes, the **Deploy** job summary shows the application URL.
 kubectl get deployment,pods,service -n taskmanager -o wide
 ```
 
-Open `http://<EXTERNAL-IP>` in the browser.
+Open `http://cia2-taskmanager.centralindia.cloudapp.azure.com` in the browser
+(or `http://<EXTERNAL-IP>`; some networks, like the college Wi-Fi filter, block bare-IP URLs,
+so the DNS name set in `k8s/service.yaml` is the one to use).
 
 ## 7. Change-and-redeploy demonstration
 
