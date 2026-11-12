@@ -1,0 +1,60 @@
+# Docker-in-Docker on your own Docker Desktop (same layout as the two AKS pods).
+#
+#   container-1-dind (outer, own Docker daemon)  ->  container-3-taskmanager (inner)
+#   container-2-dind (outer, own Docker daemon)  ->  container-4-taskmanager (inner)
+#
+# Run from the project folder:
+#   docker build -t taskmanager:local .                          # the app image (inner)
+#   docker save taskmanager:local -o target/taskmanager-local.tar
+#   docker compose -f dind/docker-compose.yml up -d --build      # the two outer containers
+#   docker exec container-1-dind docker ps                       # nested container 3
+#   docker exec container-2-dind docker ps                       # nested container 4
+#   open http://localhost:8081 and http://localhost:8082
+#   docker compose -f dind/docker-compose.yml down -v            # stop and clean up
+#
+# The inner daemons cannot see the images on your Docker Desktop, so the app
+# image is handed to them as a saved file (on AKS they pull it from ACR instead).
+name: taskmanager-dind
+
+x-outer: &outer
+  build: .
+  image: taskmanager-dind:local
+  privileged: true            # needed to run a Docker daemon inside a container
+  restart: unless-stopped
+  environment: &env
+    APP_IMAGE: taskmanager:local
+    APP_IMAGE_ARCHIVE: /images/taskmanager.tar
+    INNER_MEMORY: 640m
+    INNER_CPUS: "0.8"
+
+services:
+  container-1-dind:
+    <<: *outer
+    container_name: container-1-dind
+    hostname: pod-1
+    environment:
+      <<: *env
+      INNER_NAME: container-3-taskmanager
+    ports:
+      - "8081:8080"
+    volumes:
+      - docker-1:/var/lib/docker
+      - ../target/taskmanager-local.tar:/images/taskmanager.tar:ro
+
+  container-2-dind:
+    <<: *outer
+    container_name: container-2-dind
+    hostname: pod-2
+    environment:
+      <<: *env
+      INNER_NAME: container-4-taskmanager
+    ports:
+      - "8082:8080"
+    volumes:
+      - docker-2:/var/lib/docker
+      - ../target/taskmanager-local.tar:/images/taskmanager.tar:ro
+
+# Each outer container keeps its inner images in its own volume
+volumes:
+  docker-1:
+  docker-2:

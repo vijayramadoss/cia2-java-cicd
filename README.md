@@ -53,6 +53,10 @@ packaged as a Docker image, pushed to the registry and rolled out to Kubernetes 
   `no-new-privileges`.
 * **Registry login:** the `acr-pull` secret is mounted as the inner daemon's `config.json`.
 
+The same layout runs on local Docker Desktop with `dind/docker-compose.yml`
+(`container-1-dind` → `container-3-taskmanager`, `container-2-dind` → `container-4-taskmanager`,
+on http://localhost:8081 and http://localhost:8082). See the commands at the top of that file.
+
 Check the nested containers (`docker ps` inside each outer container):
 
 ```bash

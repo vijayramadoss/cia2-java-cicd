@@ -18,6 +18,8 @@
 #   INNER_CPUS     CPU limit of the inner container      (default: 0.8)
 #   DOCKER_CONFIG  folder holding the registry login (config.json), mounted
 #                  from the acr-pull Kubernetes secret
+#   APP_IMAGE_ARCHIVE  optional: a 'docker save' file to load instead of
+#                  pulling (used when testing on local Docker Desktop)
 set -eu
 
 : "${APP_IMAGE:?APP_IMAGE must be set to the Task Manager image}"
@@ -60,9 +62,15 @@ shutdown() {
 }
 trap shutdown TERM INT
 
-# --- 2. pull the application image ---------------------------------------------
+# --- 2. get the application image ----------------------------------------------
+# Local Docker Desktop (dind/docker-compose.yml): load it from a saved file.
+# AKS: pull it from Azure Container Registry.
+if [ -n "${APP_IMAGE_ARCHIVE:-}" ] && [ -f "$APP_IMAGE_ARCHIVE" ]; then
+    log "loading $APP_IMAGE from $APP_IMAGE_ARCHIVE"
+    docker load --quiet --input "$APP_IMAGE_ARCHIVE"
+fi
 tries=0
-until docker pull --quiet "$APP_IMAGE"; do
+until docker image inspect "$APP_IMAGE" >/dev/null 2>&1 || docker pull --quiet "$APP_IMAGE"; do
     tries=$((tries + 1))
     if [ "$tries" -ge 5 ]; then
         log "ERROR: could not pull $APP_IMAGE"
