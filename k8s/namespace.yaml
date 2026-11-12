@@ -4,3 +4,5 @@ metadata:
   name: taskmanager
   labels:
     app.kubernetes.io/part-of: cia2-cicd
+    # The Docker-in-Docker outer containers must run privileged
+    pod-security.kubernetes.io/enforce: privileged

@@ -17,3 +17,4 @@ screenshots/
 .gitleaks.toml
 Dockerfile
 .dockerignore
+dind/

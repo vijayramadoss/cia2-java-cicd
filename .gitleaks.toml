@@ -13,7 +13,16 @@ useDefault = true
 [[rules]]
 id = "hardcoded-config-secret"
 description = "Hard-coded password, secret or token in a config file"
-regex = '''(?i)\b[\w.-]*(?:password|passwd|secret|token)[\w.-]*\s*[=:]\s*['"]?([^\s'"${}]{8,})'''
+# Key and value must be on the same line ([ \t] instead of \s), so a YAML key
+# such as "secret:" followed by a nested block is not read as key + value.
+regex = '''(?i)\b[\w.-]*(?:password|passwd|secret|token)[\w.-]*[ \t]*[=:][ \t]*['"]?([^\s'"${}]{8,})'''
 secretGroup = 1
 path = '''(?i)\.(?:properties|ya?ml|env|ini|cfg|conf)$'''
 keywords = ["password", "passwd", "secret", "token"]
+
+# "secretName: acr-pull" in a Kubernetes manifest only names a Secret object;
+# it is not a secret value. Only this exact line shape is allowed.
+[[rules.allowlists]]
+description = "Kubernetes reference to a Secret by name"
+regexTarget = "line"
+regexes = ['''^\+?\s*secretName:\s*[a-z0-9-]+\s*$''']

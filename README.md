@@ -16,15 +16,48 @@ packaged as a Docker image, pushed to the registry and rolled out to Kubernetes 
  │ 1. Secret scan      Gitleaks scans the full Git history (fails on any leak)         │
  │ 2. Build & test     mvn verify  → compile, 15 JUnit tests, JaCoCo coverage, JAR     │
  │    Code quality     SonarQube analysis + quality gate (fails if gate fails)         │
- │ 3. Docker           docker build → tag :<commit-sha> and :latest → push to ACR      │
+ │ 3. Docker           build 2 images → tag :<commit-sha> and :latest → push to ACR    │
+ │                     taskmanager (the app)  +  taskmanager-dind (Docker-in-Docker)   │
  │ 4. Deploy           Ansible playbook applies k8s/ manifests to AKS, waits for the   │
  │                     rolling update, checks /actuator/health and the new version     │
  └──────────────────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
  Azure Container Registry ──image pull──► Azure Kubernetes Service (namespace taskmanager)
-                                           Deployment: 2 pods, probes, non-root
+                                           Deployment: 2 pods, probes
                                            Service: LoadBalancer ──► http://<public-ip>
+```
+
+### Docker-in-Docker (nested containers)
+
+```text
+ AKS cluster
+  └── Node 1
+       ├── Pod 1 ── Container 1: dind (outer, own Docker daemon)
+       │                └── Container 3: taskmanager (inner, the app, port 8080)
+       └── Pod 2 ── Container 2: dind (outer, own independent Docker daemon)
+                        └── Container 4: taskmanager (inner, the app, port 8080)
+```
+
+* Each outer container (`dind/Dockerfile`, based on `docker:28.5.2-dind`) starts its own
+  Docker daemon, pulls the Task Manager image from ACR and runs it as an inner container
+  (`dind/entrypoint.sh`). The inner container publishes port 8080 on the pod, so the
+  LoadBalancer service and the health probes work exactly as before.
+* **Storage:** the inner daemon keeps its images in an `emptyDir` volume at `/var/lib/docker`
+  (overlay2 cannot run on top of the container's own overlay filesystem). Limited to 2 GiB.
+* **Resources:** pod 250m–1 CPU and 512Mi–1Gi memory; the inner app is capped at
+  640 MiB / 0.8 CPU with `docker run --memory/--cpus`.
+* **Security:** the outer container must be `privileged` to run a daemon, so it gets no
+  Kubernetes API token and its daemon listens only on a local Unix socket. The inner app
+  still runs as non-root UID 10001 with a read-only filesystem, all capabilities dropped and
+  `no-new-privileges`.
+* **Registry login:** the `acr-pull` secret is mounted as the inner daemon's `config.json`.
+
+Check the nested containers (`docker ps` inside each outer container):
+
+```bash
+kubectl get pods -n taskmanager
+kubectl exec -n taskmanager <pod-name> -c dind -- docker ps
 ```
 
 ## Tools
@@ -50,7 +83,8 @@ packaged as a Docker image, pushed to the registry and rolled out to Kubernetes 
 ├── src/main/resources/static/   Web page (index.html, app.js, style.css)
 ├── src/test/java/...            Unit tests (service) + API tests (MockMvc)
 ├── pom.xml                      Maven build, JaCoCo and SonarQube plugins
-├── Dockerfile / .dockerignore   Multi-stage image build
+├── Dockerfile / .dockerignore   Multi-stage image build (the app = inner container)
+├── dind/                        Docker-in-Docker outer container (Dockerfile + entrypoint.sh)
 ├── k8s/                         Namespace, Deployment, Service manifests
 ├── ansible/                     deploy.yml playbook + inventory.ini
 ├── .github/workflows/ci-cd.yml  The CI/CD pipeline

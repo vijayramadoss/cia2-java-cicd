@@ -3,7 +3,11 @@
 #  push to main ──► 1. Secret scan (Gitleaks)
 #                   2. Build & test (Maven) + code quality (SonarQube + quality gate)
 #                   3. Docker build, tag & push to Azure Container Registry
+#                      - taskmanager       the app (inner container)
+#                      - taskmanager-dind  Docker-in-Docker outer container
 #                   4. Deploy to Azure Kubernetes Service with Ansible + verify
+#                      (each pod: outer container with its own Docker daemon,
+#                       running the app as a nested inner container)
 #
 # Pull requests run stages 1-2 only (nothing is deployed).
 #
@@ -37,6 +41,7 @@ concurrency:
 
 env:
   IMAGE_NAME: taskmanager
+  DIND_IMAGE_NAME: taskmanager-dind
   GITLEAKS_VERSION: 8.30.1
 
 jobs:
@@ -154,7 +159,7 @@ jobs:
           echo "image=$REGISTRY/$IMAGE_NAME:$version" >> "$GITHUB_OUTPUT"
           echo "Image: $REGISTRY/$IMAGE_NAME:$version"
 
-      - name: Build and tag the Docker image
+      - name: Build and tag the application image (inner container)
         env:
           REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
           VERSION: ${{ steps.meta.outputs.version }}
@@ -167,6 +172,18 @@ jobs:
             -t "$REGISTRY/$IMAGE_NAME:latest" .
           docker images "$REGISTRY/$IMAGE_NAME"
 
+      - name: Build and tag the Docker-in-Docker image (outer container)
+        env:
+          REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          docker build \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            -t "$REGISTRY/$DIND_IMAGE_NAME:$VERSION" \
+            -t "$REGISTRY/$DIND_IMAGE_NAME:latest" dind/
+          docker images "$REGISTRY/$DIND_IMAGE_NAME"
+
       - name: Log in to Azure Container Registry
         # Third-party action pinned to a full commit SHA so a moved tag cannot change it (S7637)
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -175,10 +192,12 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Push the image to the registry
+      - name: Push both images to the registry
         env:
           REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
-        run: docker push --all-tags "$REGISTRY/$IMAGE_NAME"
+        run: |
+          docker push --all-tags "$REGISTRY/$IMAGE_NAME"
+          docker push --all-tags "$REGISTRY/$DIND_IMAGE_NAME"
 
   # ---------------------------------------------------------------------------
   deploy:
@@ -214,6 +233,7 @@ jobs:
       - name: Deploy or update the application (Ansible playbook)
         env:
           IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.version }}
+          DIND_IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/${{ env.DIND_IMAGE_NAME }}:${{ needs.docker.outputs.version }}
           APP_VERSION: ${{ needs.docker.outputs.version }}
           ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
@@ -225,11 +245,18 @@ jobs:
         run: |
           kubectl rollout status deployment/taskmanager -n taskmanager --timeout=120s
           kubectl get deployment,pods,service -n taskmanager -o wide
+          # Docker-in-Docker: every outer container runs its own daemon with the app nested inside
+          for pod in $(kubectl get pods -n taskmanager -l app=taskmanager \
+                        --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}'); do
+            echo "Nested containers in $pod (outer container: dind):"
+            kubectl exec -n taskmanager "$pod" -c dind -- docker ps
+          done
           ip=$(kubectl get service taskmanager -n taskmanager -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           echo "Health check:"; curl -sSf "http://$ip/actuator/health"; echo
           echo "Version info:"; curl -sSf "http://$ip/api/info"; echo
           {
             echo "### Deployed :rocket:"
             echo "Application URL: http://cia2-taskmanager.centralindia.cloudapp.azure.com (IP: http://$ip)"
-            echo "Image: \`${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.version }}\`"
+            echo "Inner image: \`${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.version }}\`"
+            echo "Outer (DinD) image: \`${{ vars.ACR_LOGIN_SERVER }}/${{ env.DIND_IMAGE_NAME }}:${{ needs.docker.outputs.version }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

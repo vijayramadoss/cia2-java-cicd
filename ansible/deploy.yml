@@ -4,8 +4,12 @@
 # Run by the CI/CD pipeline:
 #   ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
 #
+# Docker-in-Docker: each pod runs an outer container (DIND_IMAGE) with its own
+# Docker daemon, which runs the Task Manager (IMAGE) as a nested inner container.
+#
 # Settings come from environment variables:
-#   IMAGE              full image name, e.g. myacr.azurecr.io/taskmanager:1a2b3c4
+#   IMAGE              Task Manager image (inner container), e.g. myacr.azurecr.io/taskmanager:1a2b3c4
+#   DIND_IMAGE         outer Docker-in-Docker image, e.g. myacr.azurecr.io/taskmanager-dind:1a2b3c4
 #   APP_VERSION        version expected at /api/info after the rollout
 #   ACR_LOGIN_SERVER   \
 #   ACR_USERNAME        > registry login, used to create the image pull secret
@@ -20,16 +24,19 @@
     app_name: taskmanager
     manifest_dir: "{{ playbook_dir }}/../k8s"
     image: "{{ lookup('env', 'IMAGE') | default('taskmanager:local', true) }}"
+    dind_image: "{{ lookup('env', 'DIND_IMAGE') | default('taskmanager-dind:local', true) }}"
     app_version: "{{ lookup('env', 'APP_VERSION') }}"
     registry_server: "{{ lookup('env', 'ACR_LOGIN_SERVER') }}"
     registry_username: "{{ lookup('env', 'ACR_USERNAME') }}"
     registry_password: "{{ lookup('env', 'ACR_PASSWORD') }}"
 
   tasks:
-    - name: Check that a real registry image was passed in
+    - name: Check that real registry images were passed in
       ansible.builtin.assert:
-        that: registry_server | length == 0 or image.startswith(registry_server ~ '/')
-        fail_msg: "IMAGE '{{ image }}' is not in registry {{ registry_server }} - check the pipeline's IMAGE variable"
+        that:
+          - registry_server | length == 0 or image.startswith(registry_server ~ '/')
+          - registry_server | length == 0 or dind_image.startswith(registry_server ~ '/')
+        fail_msg: "IMAGE '{{ image }}' / DIND_IMAGE '{{ dind_image }}' must be in registry {{ registry_server }}"
         quiet: true
 
     - name: Create the namespace
@@ -58,13 +65,42 @@
                     'auth': (registry_username ~ ':' ~ registry_password) | b64encode}}}
                  | to_json | b64encode }}
 
-    - name: Deploy the application with image {{ image }} and wait for the rollout
+    - name: Deploy outer image {{ dind_image }} running inner image {{ image }}, and wait for the rollout
       kubernetes.core.k8s:
         state: present
         apply: true
-        definition: "{{ lookup('file', manifest_dir + '/deployment.yaml') | replace('taskmanager:local', image) | from_yaml }}"
+        definition: >-
+          {{ lookup('file', manifest_dir + '/deployment.yaml')
+             | replace('taskmanager-dind:local', dind_image)
+             | replace('taskmanager:local', image)
+             | from_yaml }}
         wait: true
-        wait_timeout: 300
+        wait_timeout: 600
+
+    - name: Find the running application pods
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ k8s_namespace }}"
+        label_selectors:
+          - "app={{ app_name }}"
+        field_selectors:
+          - status.phase=Running
+      register: app_pods
+
+    - name: List the nested containers inside each outer container (docker ps)
+      kubernetes.core.k8s_exec:
+        namespace: "{{ k8s_namespace }}"
+        pod: "{{ item }}"
+        container: dind
+        command: docker ps --filter name=taskmanager --format "{{ '{{' }}.Names{{ '}}' }} | {{ '{{' }}.Image{{ '}}' }} | {{ '{{' }}.Status{{ '}}' }}"
+      loop: "{{ app_pods.resources | rejectattr('metadata.deletionTimestamp', 'defined') | map(attribute='metadata.name') | list }}"
+      register: nested
+      changed_when: false
+      failed_when: nested.rc != 0 or (image not in nested.stdout) or ('Up' not in nested.stdout)
+
+    - name: Show the nested containers
+      ansible.builtin.debug:
+        msg: "{{ nested.results | map(attribute='item') | zip(nested.results | map(attribute='stdout') | map('trim')) | map('join', '  ->  ') | list }}"
 
     - name: Create the LoadBalancer service
       kubernetes.core.k8s:

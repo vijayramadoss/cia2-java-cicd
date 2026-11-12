@@ -1,3 +1,16 @@
+# Docker-in-Docker (DinD) deployment:
+#
+#   AKS node
+#    ├── Pod 1 ── outer container "dind" (own Docker daemon) ── inner container "taskmanager"
+#    └── Pod 2 ── outer container "dind" (own Docker daemon) ── inner container "taskmanager"
+#
+# Each outer container starts its own Docker daemon and runs the Task Manager
+# image as a nested container (see dind/entrypoint.sh). The inner container
+# publishes port 8080 on the pod, so the LoadBalancer service and the probes
+# reach the app exactly as before.
+#
+# Check the nested containers:
+#   kubectl exec -n taskmanager <pod-name> -c dind -- docker ps
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,35 +35,52 @@ spec:
       labels:
         app: taskmanager
     spec:
-      # Lets AKS pull from the private Azure Container Registry (created by Ansible)
+      # Lets AKS pull the outer image from the private Azure Container Registry
+      # (secret created by Ansible)
       imagePullSecrets:
         - name: acr-pull
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 10001
-        runAsGroup: 10001
+      # The outer container is privileged, so it gets no Kubernetes API token
+      automountServiceAccountToken: false
+      # Time for the inner container and the daemon to shut down cleanly
+      terminationGracePeriodSeconds: 45
       containers:
-        - name: taskmanager
-          # "taskmanager:local" works for a local cluster (Docker Desktop).
-          # The Ansible playbook swaps it for <acr>.azurecr.io/taskmanager:<commit-sha>.
-          image: taskmanager:local
+        - name: dind
+          # The Ansible playbook swaps these placeholders for the ACR images:
+          #   taskmanager-dind:local -> <acr>.azurecr.io/taskmanager-dind:<commit-sha>
+          #   taskmanager:local      -> <acr>.azurecr.io/taskmanager:<commit-sha>
+          image: taskmanager-dind:local
           imagePullPolicy: IfNotPresent
+          env:
+            # Image the outer Docker daemon runs as the inner container
+            - name: APP_IMAGE
+              value: taskmanager:local
+            - name: INNER_MEMORY
+              value: 640m
+            - name: INNER_CPUS
+              value: "0.8"
+            # Registry login used by the inner daemon to pull APP_IMAGE
+            - name: DOCKER_CONFIG
+              value: /etc/acr-auth
           ports:
             - name: http
               containerPort: 8080
           resources:
+            # Covers the Docker daemon (~100Mi) plus the inner Java app (640Mi max)
             requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
+              cpu: 250m
               memory: 512Mi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+              ephemeral-storage: 3Gi
+          # Startup = start daemon + pull image + start Spring Boot: allow up to 5 minutes
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
               port: http
             periodSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -62,14 +92,26 @@ spec:
               port: http
             periodSeconds: 5
           securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
+            # Required: a Docker daemon needs to create namespaces, cgroups,
+            # mounts and iptables rules for its own containers.
+            privileged: true
           volumeMounts:
-            - name: tmp
-              mountPath: /tmp
+            # Inner images and containers. A volume (not the container's own
+            # overlay filesystem) so the inner daemon can use overlay2.
+            - name: docker-storage
+              mountPath: /var/lib/docker
+            - name: acr-auth
+              mountPath: /etc/acr-auth
+              readOnly: true
       volumes:
-        # Spring Boot / Tomcat need a writable /tmp because the root filesystem is read-only
-        - name: tmp
-          emptyDir: {}
+        - name: docker-storage
+          emptyDir:
+            sizeLimit: 2Gi
+        # The image pull secret, mounted as a Docker config.json for the inner daemon
+        - name: acr-auth
+          secret:
+            secretName: acr-pull
+            optional: true
+            items:
+              - key: .dockerconfigjson
+                path: config.json
