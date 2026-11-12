@@ -13,6 +13,13 @@ metadata:
 spec:
   # On AKS this creates an Azure Load Balancer with a public IP
   type: LoadBalancer
+  # Tasks are kept in memory inside each pod, so keep every user on the same
+  # pod; otherwise a task added on pod 1 is "not found" when the next request
+  # (complete/delete) lands on pod 2. Timeout: 3 hours of inactivity.
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
   selector:
     app: taskmanager
   ports:
